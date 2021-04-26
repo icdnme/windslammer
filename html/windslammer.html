@@ -47,8 +47,10 @@ var width = 960,
     height = 500,
     radius = Math.min(width, height) / 2 - 30;
 
+var max_wind = 30;
+
 var r = d3.scaleLinear()
-    .domain([0, 20])
+    .domain([0, max_wind])
     .range([0, radius]);
 
 var svg = d3.select("body").append("svg")
@@ -99,9 +101,9 @@ ga.append("text")
     .text(function(d) { return d + "°"; });
 
 var n_t_bins = 36;
-var n_r_bins = 10;
+var n_r_bins = 15;
 var t_bin = d3.scaleQuantize().domain([0,360]).range(d3.range(0,n_t_bins,1));
-var r_bin = d3.scaleQuantize().domain([0,20]).range(d3.range(0,n_r_bins,1));
+var r_bin = d3.scaleQuantize().domain([0,max_wind]).range(d3.range(0,n_r_bins,1));
 var arc_spec = new Array(n_t_bins);
 for (i=0; i<n_t_bins; i++) {
     arc_spec[i] = new Array(n_r_bins);
@@ -117,32 +119,41 @@ histogram.selectAll(".ray")
         .attr("class", "arc")
         .attr("d", function(d) {
               return d3.arc()
-                  .innerRadius(r(2*d[1]))
-                  .outerRadius(r(2*d[1]+2))
+                  .innerRadius(r(Math.floor(max_wind/n_r_bins*d[1])))
+                  .outerRadius(r(Math.floor(max_wind/n_r_bins*(d[1]+1))))
                   .startAngle(Math.PI / 180 * (360/n_t_bins) * d[0])
                   .endAngle(Math.PI / 180 * (360/n_t_bins) * (d[0]+1))();
         })
         .attr("fill", d=>d3.interpolateBlues(0));
 
-fetch('https://alexhonda.com/windslammer')
-    .then(response => response.json())
-    .then(function(x){
-        var counts = new Array(n_t_bins).fill(0).map(() => new Array(n_r_bins).fill(0));
-        //console.log(counts);
-        x.forEach(function(y){
-            counts[t_bin(y[1])][r_bin(y[2])] += 1;
-        });
-        /*
-        svg.append("g").attr("class", "points").selectAll("circle")
-            .data(x.map(y=>[y[1],y[2]])).enter().append("circle")
-            .attr("cx", d=>-Math.sin(-d[0]*Math.PI/180)*r(d[1]))
-            .attr("cy", d=>-Math.cos(-d[0]*Math.PI/180)*r(d[1]))
-            .attr("r", 0.25)
-            .attr("fill", "red")
-        */
-        d3.selectAll(".ray").data(counts).selectAll("path").data(d=>d)
-        .attr("fill", d=>d3.interpolateBlues(Math.log(d+1)/Math.log(Math.max(...[].concat(...counts)))));
+fetch('https://alexhonda.com/windslammer', {
+      method: 'POST',
+      body: '{"type":"histogram", "window": 600}',
+}).then(response => response.json())
+.then(function(x){
+    var counts = new Array(n_t_bins).fill(0).map(() => new Array(n_r_bins).fill(0));
+    let total_count = 0;
+    x.forEach(function(y){
+        let mph = Math.floor(y[0] / n_t_bins);
+        let dir = y[0] % n_t_bins;
+        if (mph < n_r_bins) {
+          counts[dir][mph] = y[1];
+          total_count += y[1];
+        }
     });
+    /*
+    svg.append("g").attr("class", "points").selectAll("circle")
+        .data(x.map(y=>[y[1],y[2]])).enter().append("circle")
+        .attr("cx", d=>-Math.sin(-d[0]*Math.PI/180)*r(d[1]))
+        .attr("cy", d=>-Math.cos(-d[0]*Math.PI/180)*r(d[1]))
+        .attr("r", 0.25)
+        .attr("fill", "red")
+    */
+    d3.selectAll(".ray").data(counts).selectAll("path").data(d=>d)
+    .attr("fill", function(d) {
+      return d3.interpolateBlues(Math.log(d+1)/Math.max(1, Math.log(Math.max(...[].concat(...counts)))));
+    });
+});
 
 </script>
 </body>
