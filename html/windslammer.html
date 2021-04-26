@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<meta charset="utf-8">
+<style>
+
+.frame {
+  fill: none;
+  stroke: #000;
+}
+
+.axis text {
+  font: 10px sans-serif;
+}
+
+/*
+.axis line,
+.axis circle {
+  fill: none;
+  stroke: #777;
+  stroke-dasharray: 1,4;
+}
+
+.axis :last-of-type circle {
+  stroke: #333;
+  stroke-dasharray: none;
+}
+
+.line {
+  fill: none;
+  stroke: red;
+  stroke-width: 1.5px;
+}
+*/
+
+</style>
+<body>
+<script src="https://d3js.org/d3.v6.min.js"></script>
+<script>
+
+var data = d3.range(0, 2 * Math.PI, .01).map(function(t) {
+  return [t, Math.sin(2 * t) * Math.cos(2 * t)];
+});
+
+var data = [];
+
+var width = 960,
+    height = 500,
+    radius = Math.min(width, height) / 2 - 30;
+
+var r = d3.scaleLinear()
+    .domain([0, 20])
+    .range([0, radius]);
+
+var svg = d3.select("body").append("svg")
+    .attr("width", width)
+    .attr("height", height)
+  .append("g")
+    .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
+
+var histogram = svg.append("g").attr("class", "histogram");
+
+var gr = svg.append("g")
+    .attr("class", "r axis")
+  .selectAll("g")
+    .data(r.ticks(10).slice(1))
+  .enter().append("g");
+
+gr.append("circle")
+    .attr("r", r)
+    .attr("stroke", "#707070")
+    .attr("stroke-dasharray", "1,4")
+    .attr("fill", "none");
+
+gr.append("text")
+    .attr("y", function(d) { return -r(d) - 4; })
+    .attr("transform", "rotate(-15)")
+    .style("text-anchor", "middle")
+    .text(function(d) { return d; });
+
+var radial_ticks = d3.range(0, 360, 10);
+var ga = svg.append("g")
+    .attr("class", "a axis")
+  .selectAll("g")
+    .data(radial_ticks)
+  .enter().append("g")
+    .attr("transform", function(d) { return "rotate(" + (d-90) + ")"; });
+
+ga.append("line")
+    .attr("x1", (d,i) => (i%2==0)?r(2):r(6))
+    .attr("x2", radius)
+    .attr("stroke","#707070")
+    .attr("stroke-dasharray", "1,4");
+
+ga.append("text")
+    .attr("x", radius + 6)
+    .attr("dy", ".35em")
+    .style("text-anchor", function(d) { return d > 180 && d < 360 ? "end" : null; })
+    .attr("transform", function(d) { return d > 180 && d < 360 ? "rotate(180 " + (radius + 6) + ",0)" : null; })
+    .text(function(d) { return d + "°"; });
+
+var n_t_bins = 36;
+var n_r_bins = 10;
+var t_bin = d3.scaleQuantize().domain([0,360]).range(d3.range(0,n_t_bins,1));
+var r_bin = d3.scaleQuantize().domain([0,20]).range(d3.range(0,n_r_bins,1));
+var arc_spec = new Array(n_t_bins);
+for (i=0; i<n_t_bins; i++) {
+    arc_spec[i] = new Array(n_r_bins);
+    for (j=0; j<n_r_bins; j++) {
+        arc_spec[i][j] = [i,j];
+    }
+}
+
+histogram.selectAll(".ray")
+    .data(arc_spec).enter()
+    .append("g").attr("class", "ray").selectAll(".arc").data(d=>d).enter()
+    .append("path")
+        .attr("class", "arc")
+        .attr("d", function(d) {
+              return d3.arc()
+                  .innerRadius(r(2*d[1]))
+                  .outerRadius(r(2*d[1]+2))
+                  .startAngle(Math.PI / 180 * (360/n_t_bins) * d[0])
+                  .endAngle(Math.PI / 180 * (360/n_t_bins) * (d[0]+1))();
+        })
+        .attr("fill", d=>d3.interpolateBlues(0));
+
+fetch('https://alexhonda.com/windslammer')
+    .then(response => response.json())
+    .then(function(x){
+        var counts = new Array(n_t_bins).fill(0).map(() => new Array(n_r_bins).fill(0));
+        //console.log(counts);
+        x.forEach(function(y){
+            counts[t_bin(y[1])][r_bin(y[2])] += 1;
+        });
+        /*
+        svg.append("g").attr("class", "points").selectAll("circle")
+            .data(x.map(y=>[y[1],y[2]])).enter().append("circle")
+            .attr("cx", d=>-Math.sin(-d[0]*Math.PI/180)*r(d[1]))
+            .attr("cy", d=>-Math.cos(-d[0]*Math.PI/180)*r(d[1]))
+            .attr("r", 0.25)
+            .attr("fill", "red")
+        */
+        d3.selectAll(".ray").data(counts).selectAll("path").data(d=>d)
+        .attr("fill", d=>d3.interpolateBlues(Math.log(d+1)/Math.log(Math.max(...[].concat(...counts)))));
+    });
+
+</script>
+</body>
+</html>
